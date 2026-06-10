@@ -17,6 +17,30 @@ import { useState, useEffect } from 'react';
 const FLAG_LABELS = { yes: 'Yes', no: 'No', maybe: 'Maybe' };
 const FLAG_CLASS  = { yes: 'suggestions-badge--yes', no: 'suggestions-badge--no', maybe: 'suggestions-badge--maybe' };
 
+// Parse recurrenceFreq string (e.g. "weekly:2", "monthly:15", "quarterly:1,4,7,10:15")
+// into the app's internal recurrence object
+function parseRecurrenceFreq(freq, startDate) {
+  if (!freq || freq === 'once') {
+    return { type: 'once', date: startDate };
+  }
+  if (freq.startsWith('weekly:') || freq.startsWith('biweekly:')) {
+    var dow = parseInt(freq.split(':')[1], 10);
+    return { type: 'weekly', dayOfWeek: isNaN(dow) ? 1 : dow };
+  }
+  if (freq.startsWith('monthly:')) {
+    var dom = parseInt(freq.split(':')[1], 10);
+    return { type: 'monthly', dayOfMonth: isNaN(dom) ? 1 : dom };
+  }
+  if (freq.startsWith('quarterly:')) {
+    var parts = freq.split(':');
+    var months = parts[1] ? parts[1].split(',').map(Number) : [0,3,6,9];
+    var qdom = parseInt(parts[2], 10) || 1;
+    return { type: 'quarterly', months: months, dayOfMonth: qdom };
+  }
+  // Fallback — show on start date only
+  return { type: 'once', date: startDate };
+}
+
 // Map a sheet row object to the app's internal meeting shape
 function rowToMeeting(row) {
   return {
@@ -26,7 +50,7 @@ function rowToMeeting(row) {
     audience: 'Executive',
     time: row.time || '09:00',
     durationMinutes: parseDuration(row.duration),
-    recurrence: { type: 'custom', startDate: row.startDate, label: row.recurrenceRule || 'From Google Calendar' },
+    recurrence: parseRecurrenceFreq(row.recurrenceFreq, row.startDate),
     _fromCalendar: true,
     _location: row.location,
   };

@@ -17,7 +17,7 @@ var CLAUDE_MODEL      = 'claude-haiku-3-5-latest';
 // Column order in the sheet
 var COLUMNS = [
   'id', 'title', 'startDate', 'endDate', 'isRecurring', 'recurrenceRule',
-  'time', 'duration', 'location', 'ai_flag', 'ai_reason', 'status', 'addedDate'
+  'recurrenceFreq', 'time', 'duration', 'location', 'ai_flag', 'ai_reason', 'status', 'addedDate'
 ];
 
 // ============================================================
@@ -58,13 +58,8 @@ function syncCalendar() {
     var startDate     = event.getStartTime();
     var endDate       = event.getEndTime();
     var isRecurring   = event.isRecurringEvent();
-    var recurrenceRule = '';
-    try {
-      // getRecurrence() only exists on recurring events; wrap to be safe
-      if (isRecurring) {
-        recurrenceRule = event.getRecurrence() ? 'recurring' : '';
-      }
-    } catch (e) { recurrenceRule = ''; }
+    var recurrenceRule = isRecurring ? 'recurring' : '';
+    var recurrenceFreq = isRecurring ? detectRecurrenceFreq_(event, startDate) : 'once';
     var timeStr       = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'HH:mm');
     var durationMs    = endDate - startDate;
     var durationMins  = Math.round(durationMs / 60000);
@@ -81,6 +76,7 @@ function syncCalendar() {
       Utilities.formatDate(endDate,   Session.getScriptTimeZone(), 'yyyy-MM-dd'),
       isRecurring ? 'TRUE' : 'FALSE',
       recurrenceRule,
+      recurrenceFreq,
       timeStr,
       durationMins + ' min',
       location,
@@ -166,6 +162,46 @@ function assessWithClaude_(title, startDate, durationMins, isRecurring, location
   } catch (e) {
     Logger.log('assessWithClaude_ exception: ' + e);
     return { flag: 'maybe', reason: 'Exception: ' + e.message };
+  }
+}
+
+// ============================================================
+// detectRecurrenceFreq_(event, startDate)
+// Detects whether a recurring event repeats weekly, biweekly,
+// monthly, or quarterly by fetching the next occurrence and
+// measuring the gap. Returns a string like:
+//   weekly:2        (weekly on Tuesday, 0=Sun)
+//   biweekly:2      (every 2 weeks on Tuesday)
+//   monthly:15      (monthly on the 15th)
+//   quarterly:1,4,7,10:15  (quarterly, on the 15th)
+//   once            (fallback / not recurring)
+// ============================================================
+function detectRecurrenceFreq_(event, startDate) {
+  try {
+    var cal = CalendarApp.getCalendarsByName(CALENDAR_NAME)[0];
+    var searchStart = new Date(startDate.getTime() + 5  * 24 * 60 * 60 * 1000);
+    var searchEnd   = new Date(startDate.getTime() + 100 * 24 * 60 * 60 * 1000);
+    var candidates  = cal.getEvents(searchStart, searchEnd);
+    var title       = event.getTitle();
+    var dow         = startDate.getDay();
+    var dom         = startDate.getDate();
+
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i].getTitle() !== title) continue;
+      var diff = Math.round((candidates[i].getStartTime() - startDate) / (24 * 60 * 60 * 1000));
+      if (diff >= 6  && diff <= 8)  return 'weekly:'    + dow;
+      if (diff >= 13 && diff <= 15) return 'biweekly:'  + dow;
+      if (diff >= 25 && diff <= 35) return 'monthly:'   + dom;
+      if (diff >= 85 && diff <= 95) {
+        var m = startDate.getMonth();
+        var months = [m, (m+3)%12, (m+6)%12, (m+9)%12].sort(function(a,b){return a-b;});
+        return 'quarterly:' + months.join(',') + ':' + dom;
+      }
+    }
+    // Fallback: assume weekly based on start day
+    return 'weekly:' + dow;
+  } catch(e) {
+    return 'weekly:' + startDate.getDay();
   }
 }
 
