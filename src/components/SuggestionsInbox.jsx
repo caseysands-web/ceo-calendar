@@ -64,18 +64,23 @@ function splitCSVLine(line) {
   return result;
 }
 
-// Convert a gviz/tq URL to the CSV export URL (works cross-origin)
+// Convert any Google Sheets URL to a publicly accessible CSV URL
 function toCsvUrl(url) {
-  // If already a CSV pubhtml or export URL, use as-is
+  // Already a proper published CSV URL — use as-is
   if (url.includes('output=csv') || url.includes('format=csv')) return url;
-  // Extract sheet ID from standard or gviz URL
+  // pubhtml URL with 2PACX- published ID — convert to CSV
+  var pubMatch = url.match(/\/spreadsheets\/d\/e\/(2PACX-[a-zA-Z0-9_-]+)/);
+  if (pubMatch) {
+    var gidMatch = url.match(/gid=(\d+)/);
+    var gid = gidMatch ? gidMatch[1] : '0';
+    return 'https://docs.google.com/spreadsheets/d/e/' + pubMatch[1] + '/pub?gid=' + gid + '&single=true&output=csv';
+  }
+  // Fallback: standard sheet ID
   var match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) return url;
-  var id = match[1];
-  // Extract gid if present
-  var gidMatch = url.match(/gid=(\d+)/);
-  var gid = gidMatch ? gidMatch[1] : '0';
-  return 'https://docs.google.com/spreadsheets/d/' + id + '/export?format=csv&gid=' + gid;
+  var gidMatch2 = url.match(/gid=(\d+)/);
+  var gid2 = gidMatch2 ? gidMatch2[1] : '0';
+  return 'https://docs.google.com/spreadsheets/d/' + match[1] + '/export?format=csv&gid=' + gid2;
 }
 
 export default function SuggestionsInbox({ sheetUrl, onApprove }) {
