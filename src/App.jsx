@@ -1,4 +1,4 @@
-import { useState, useReducer } from 'react';
+import { useState, useReducer, useEffect } from 'react';
 import YearView from './components/YearView';
 import MonthView from './components/MonthView';
 import MeetingLegend from './components/MeetingLegend';
@@ -32,11 +32,30 @@ function meetingsReducer(state, action) {
     case 'DELETE':
       next = state.filter(m => m.id !== action.id);
       break;
+    case 'REMOVE_CANCELLED':
+      next = state.filter(m => !action.cancelledIds.has(m.id));
+      if (next.length === state.length) return state; // nothing changed
+      break;
     default:
       return state;
   }
   saveMeetings(next);
   return next;
+}
+
+// Mirror of the toCsvUrl helper in SuggestionsInbox
+function toCsvUrl(url) {
+  if (url.includes('output=csv') || url.includes('format=csv')) return url;
+  var pubMatch = url.match(/\/spreadsheets\/d\/e\/(2PACX-[a-zA-Z0-9_-]+)/);
+  if (pubMatch) {
+    var gidMatch = url.match(/gid=(\d+)/);
+    var gid = gidMatch ? gidMatch[1] : '0';
+    return 'https://docs.google.com/spreadsheets/d/e/' + pubMatch[1] + '/pub?gid=' + gid + '&single=true&output=csv';
+  }
+  var match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) return url;
+  var gidMatch2 = url.match(/gid=(\d+)/);
+  return 'https://docs.google.com/spreadsheets/d/' + match[1] + '/export?format=csv&gid=' + (gidMatch2 ? gidMatch2[1] : '0');
 }
 
 export default function App() {
@@ -57,8 +76,35 @@ export default function App() {
     setSelectedMonth(null);
   }
 
+  // On load, fetch the sheet and remove any approved Google Calendar
+  // meetings whose status is now 'cancelled'
+  useEffect(() => {
+    if (!sheetUrl) return;
+    const csvUrl = toCsvUrl(sheetUrl);
+    fetch(csvUrl)
+      .then(r => r.text())
+      .then(text => {
+        const lines = text.trim().split('\n').map(l => l.trim());
+        if (lines.length < 2) return;
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const idIdx     = headers.indexOf('id');
+        const statusIdx = headers.indexOf('status');
+        if (idIdx === -1 || statusIdx === -1) return;
+        const cancelledIds = new Set();
+        lines.slice(1).forEach(line => {
+          const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+          if (cols[statusIdx] === 'cancelled') cancelledIds.add(cols[idIdx]);
+        });
+        if (cancelledIds.size > 0) {
+          dispatch({ type: 'REMOVE_CANCELLED', cancelledIds });
+        }
+      })
+      .catch(() => {}); // silently ignore fetch errors on load
+  }, [sheetUrl]);
+
   function handleAdd(meeting) {
-    const id = String(Date.now());
+    // Preserve the Google Calendar event ID so cancellation detection works
+    const id = meeting._fromCalendar ? meeting.id : String(Date.now());
     dispatch({ type: 'ADD', meeting: { ...meeting, id } });
     setShowAdd(false);
   }
