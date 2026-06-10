@@ -104,7 +104,7 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
         var rows = parseCSV(text);
         // Only surface rows that are still pending and AI-flagged yes/maybe
         var pending = rows.filter(function(r) {
-          return r.status === 'pending' && (r.ai_flag === 'yes' || r.ai_flag === 'maybe');
+          return r.status === 'pending';
         });
         setItems(pending.map(function(r) { return { row: r, dismissed: false }; }));
         setLoading(false);
