@@ -42,7 +42,14 @@ function syncCalendar() {
   var events = calendar.getEvents(RANGE_START, RANGE_END);
   Logger.log('Found ' + events.length + ' events in range.');
 
-  // --- 3. De-duplicate: for recurring events, only keep the FIRST occurrence ---
+  // --- 3. Check for cancellations: mark sheet rows whose event no longer exists ---
+  var liveBaseIds = {};
+  for (var k = 0; k < events.length; k++) {
+    liveBaseIds[events[k].getId().split('_')[0]] = true;
+  }
+  markCancelledEvents_(sheet, liveBaseIds);
+
+  // --- 5. De-duplicate: for recurring events, only keep the FIRST occurrence ---
   // Google Calendar returns every single occurrence; we only want one row per series.
   var seenBaseIds = {};
   var toProcess = [];
@@ -58,7 +65,7 @@ function syncCalendar() {
   }
   Logger.log('Unique events to process: ' + toProcess.length);
 
-  // --- 4. Process each unique event ---
+  // --- 6. Process each unique event ---
   for (var j = 0; j < toProcess.length; j++) {
     var event = toProcess[j].event;
     var eventId = toProcess[j].baseId; // use base ID so dedup works across runs
@@ -219,6 +226,35 @@ function detectRecurrenceFreq_(event, startDate) {
   } catch(e) {
     return 'weekly:' + startDate.getDay();
   }
+}
+
+// ============================================================
+// markCancelledEvents_(sheet, liveBaseIds)
+// Scans every row in the sheet. If a row's event ID is no longer
+// present in the live calendar, sets its status to 'cancelled'.
+// The React app filters out cancelled rows automatically.
+// ============================================================
+function markCancelledEvents_(sheet, liveBaseIds) {
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+
+  var headers = data[0];
+  var idCol     = headers.indexOf('id');
+  var statusCol = headers.indexOf('status');
+  if (idCol === -1 || statusCol === -1) return;
+
+  var cancelled = 0;
+  for (var i = 1; i < data.length; i++) {
+    var rowId  = String(data[i][idCol]).split('_')[0];
+    var status = String(data[i][statusCol]);
+    // Only mark non-cancelled rows whose event is gone from the calendar
+    if (status !== 'cancelled' && !liveBaseIds[rowId]) {
+      sheet.getRange(i + 1, statusCol + 1).setValue('cancelled');
+      cancelled++;
+      Logger.log('Marked as cancelled: ' + data[i][headers.indexOf('title')]);
+    }
+  }
+  Logger.log('Cancelled events marked: ' + cancelled);
 }
 
 // ============================================================
