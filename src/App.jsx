@@ -62,7 +62,13 @@ const DEFAULT_MEETINGS = [
 function loadMeetings() {
   try {
     const stored = localStorage.getItem('ceo-calendar-meetings');
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Merge: keep stored meetings, but add any default meetings not already present
+      const storedIds = new Set(parsed.map(m => m.id));
+      const missingDefaults = DEFAULT_MEETINGS.filter(m => !storedIds.has(m.id));
+      return [...missingDefaults, ...parsed];
+    }
   } catch {}
   return DEFAULT_MEETINGS;
 }
