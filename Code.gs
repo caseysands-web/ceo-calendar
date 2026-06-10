@@ -42,10 +42,26 @@ function syncCalendar() {
   var events = calendar.getEvents(RANGE_START, RANGE_END);
   Logger.log('Found ' + events.length + ' events in range.');
 
-  // --- 3. Process each event ---
+  // --- 3. De-duplicate: for recurring events, only keep the FIRST occurrence ---
+  // Google Calendar returns every single occurrence; we only want one row per series.
+  var seenBaseIds = {};
+  var toProcess = [];
   for (var i = 0; i < events.length; i++) {
-    var event = events[i];
-    var eventId = event.getId();
+    var ev = events[i];
+    // Base ID = everything before the first underscore+date suffix (e.g. "abc123_20260616T..." → "abc123")
+    var baseId = ev.getId().split('_')[0];
+    if (ev.isRecurringEvent()) {
+      if (seenBaseIds[baseId]) continue; // skip later occurrences
+      seenBaseIds[baseId] = true;
+    }
+    toProcess.push({ event: ev, baseId: baseId });
+  }
+  Logger.log('Unique events to process: ' + toProcess.length);
+
+  // --- 4. Process each unique event ---
+  for (var j = 0; j < toProcess.length; j++) {
+    var event = toProcess[j].event;
+    var eventId = toProcess[j].baseId; // use base ID so dedup works across runs
 
     // Skip events we've already processed
     if (existingIds[eventId]) {
