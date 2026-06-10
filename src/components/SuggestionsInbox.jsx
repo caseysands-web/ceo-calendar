@@ -106,6 +106,16 @@ function toCsvUrl(url) {
   return 'https://docs.google.com/spreadsheets/d/' + match[1] + '/export?format=csv&gid=' + gid2;
 }
 
+const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL || '';
+
+function updateStatus(id, status) {
+  if (!SCRIPT_URL) return;
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'updateStatus', id, status }),
+  }).catch(() => {});
+}
+
 export default function SuggestionsInbox({ sheetUrl, onApprove }) {
   const [open,       setOpen]       = useState(true);
   const [items,      setItems]      = useState([]);   // { row, dismissed }
@@ -144,12 +154,14 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
   function handleApprove(index) {
     var item = visibleItems[index];
     if (onApprove) onApprove(rowToMeeting(item.row));
+    updateStatus(item.row.id, 'approved');
     dismissItem(item);
   }
 
   function handleApproveAll() {
     visibleItems.forEach(function(item) {
       if (onApprove) onApprove(rowToMeeting(item.row));
+      updateStatus(item.row.id, 'approved');
     });
     setItems(function(prev) {
       return prev.map(function(it) { return { ...it, dismissed: true }; });
@@ -157,7 +169,9 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
   }
 
   function handleReject(index) {
-    dismissItem(visibleItems[index]);
+    var item = visibleItems[index];
+    updateStatus(item.row.id, 'rejected');
+    dismissItem(item);
   }
 
   function dismissItem(target) {

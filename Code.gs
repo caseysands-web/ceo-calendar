@@ -291,6 +291,52 @@ function doGet() {
 }
 
 // ============================================================
+// doPost(e)
+// Accepts a JSON body: { action: "updateStatus", id: "...", status: "approved"|"rejected" }
+// Updates the matching row's status in the sheet.
+// Deploy this script as a Web App (Execute as: Me, Who has access: Anyone)
+// to get the endpoint URL to use as VITE_SCRIPT_URL in the React app.
+// ============================================================
+function doPost(e) {
+  var headers = { 'Access-Control-Allow-Origin': '*' };
+  try {
+    var body   = JSON.parse(e.postData.contents);
+    var action = body.action;
+    var id     = String(body.id).split('_')[0];
+    var status = body.status;
+
+    if (action !== 'updateStatus' || !id || !status) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: 'Invalid request' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var sheet   = getOrCreateSheet_();
+    var data    = sheet.getDataRange().getValues();
+    var hdrs    = data[0];
+    var idCol   = hdrs.indexOf('id');
+    var stCol   = hdrs.indexOf('status');
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idCol]).split('_')[0] === id) {
+        sheet.getRange(i + 1, stCol + 1).setValue(status);
+        Logger.log('Updated status for ' + id + ' → ' + status);
+        return ContentService
+          .createTextOutput(JSON.stringify({ ok: true }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: 'ID not found' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ============================================================
 // Helpers
 // ============================================================
 
