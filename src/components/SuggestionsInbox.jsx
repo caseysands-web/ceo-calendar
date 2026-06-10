@@ -39,19 +39,43 @@ function parseDuration(str) {
   return m ? parseInt(m[1], 10) : 60;
 }
 
-// Parse the Google Sheets gviz/tq JSONP-ish response.
-// The response is wrapped in  /*O_o*/\ngoogle.visualization.Query.setResponse({...});
-function parseGvizResponse(text) {
-  var json = text.replace(/^[^{]*/, '').replace(/\);?\s*$/, '');
-  var data  = JSON.parse(json);
-  var cols  = data.table.cols.map(function(c) { return c.label || c.id; });
-  return (data.table.rows || []).map(function(r) {
+// Parse a CSV string into an array of row objects keyed by header row
+function parseCSV(text) {
+  var lines = text.trim().split('\n').map(function(l) { return l.trim(); });
+  if (lines.length < 2) return [];
+  var headers = splitCSVLine(lines[0]);
+  return lines.slice(1).map(function(line) {
+    var values = splitCSVLine(line);
     var obj = {};
-    cols.forEach(function(col, i) {
-      obj[col] = r.c[i] ? r.c[i].v : '';
-    });
+    headers.forEach(function(h, i) { obj[h] = values[i] || ''; });
     return obj;
   });
+}
+
+function splitCSVLine(line) {
+  var result = [], current = '', inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// Convert a gviz/tq URL to the CSV export URL (works cross-origin)
+function toCsvUrl(url) {
+  // If already a CSV pubhtml or export URL, use as-is
+  if (url.includes('output=csv') || url.includes('format=csv')) return url;
+  // Extract sheet ID from standard or gviz URL
+  var match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) return url;
+  var id = match[1];
+  // Extract gid if present
+  var gidMatch = url.match(/gid=(\d+)/);
+  var gid = gidMatch ? gidMatch[1] : '0';
+  return 'https://docs.google.com/spreadsheets/d/' + id + '/export?format=csv&gid=' + gid;
 }
 
 export default function SuggestionsInbox({ sheetUrl, onApprove }) {
@@ -66,13 +90,13 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
     setLoading(true);
     setError(null);
 
-    fetch(sheetUrl)
+    fetch(toCsvUrl(sheetUrl))
       .then(function(res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.text();
       })
       .then(function(text) {
-        var rows = parseGvizResponse(text);
+        var rows = parseCSV(text);
         // Only surface rows that are still pending and AI-flagged yes/maybe
         var pending = rows.filter(function(r) {
           return r.status === 'pending' && (r.ai_flag === 'yes' || r.ai_flag === 'maybe');
