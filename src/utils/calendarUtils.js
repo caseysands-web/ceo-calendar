@@ -58,6 +58,12 @@ export function getMeetingsForDate(meetings, date) {
       const end = isoToDate(r.endDate);
       return date >= start && date <= end;
     }
+    // Google Calendar imported events — match by startDate
+    if (r.type === 'custom') {
+      if (!r.startDate) return false;
+      const od = isoToDate(r.startDate);
+      return od.getFullYear() === y && od.getMonth() === m && od.getDate() === d;
+    }
     return false;
   });
 }

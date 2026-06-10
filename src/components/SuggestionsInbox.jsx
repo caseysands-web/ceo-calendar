@@ -22,13 +22,12 @@ function rowToMeeting(row) {
   return {
     id: String(row.id || Date.now()),
     name: row.title || 'Untitled',
-    color: '#2563EB',          // default blue; user can edit after approval
+    color: '#2563EB',
     audience: 'Executive',
     time: row.time || '09:00',
     durationMinutes: parseDuration(row.duration),
-    recurrence: { type: 'custom', label: row.recurrenceRule || 'See calendar' },
-    _fromCalendar: true,       // marker so the app knows this came from Google Calendar
-    _startDate: row.startDate,
+    recurrence: { type: 'custom', startDate: row.startDate, label: row.recurrenceRule || 'From Google Calendar' },
+    _fromCalendar: true,
     _location: row.location,
   };
 }
@@ -124,6 +123,15 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
     dismissItem(item);
   }
 
+  function handleApproveAll() {
+    visibleItems.forEach(function(item) {
+      if (onApprove) onApprove(rowToMeeting(item.row));
+    });
+    setItems(function(prev) {
+      return prev.map(function(it) { return { ...it, dismissed: true }; });
+    });
+  }
+
   function handleReject(index) {
     dismissItem(visibleItems[index]);
   }
@@ -170,7 +178,18 @@ export default function SuggestionsInbox({ sheetUrl, onApprove }) {
             <span className="suggestions-count">{pendingCount}</span>
           )}
         </span>
-        <span className="suggestions-chevron">{open ? '▾' : '▸'}</span>
+        <div className="suggestions-header-actions">
+          {pendingCount > 0 && (
+            <button
+              className="suggestions-approve-all"
+              onClick={e => { e.stopPropagation(); handleApproveAll(); }}
+              title="Approve all suggestions"
+            >
+              Approve All
+            </button>
+          )}
+          <span className="suggestions-chevron">{open ? '▾' : '▸'}</span>
+        </div>
       </div>
 
       {open && (
